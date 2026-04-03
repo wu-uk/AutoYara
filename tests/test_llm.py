@@ -1,6 +1,8 @@
 """Unit tests for llm module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestSyncLLMClient:
@@ -74,12 +76,13 @@ class TestAsyncLLMClient:
     """Tests for AsyncLLMClient."""
 
     @patch("autoyara.llm.async_client.AsyncOpenAI")
+    @pytest.mark.asyncio
     async def test_chat_returns_content(self, mock_openai):
         from autoyara.llm import AsyncLLMClient
 
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "Async Hello!"
-        mock_openai.return_value.chat.completions.create.return_value = mock_response
+        mock_openai.return_value.chat.completions.create = AsyncMock(return_value=mock_response)
 
         client = AsyncLLMClient(api_key="test-key")
         result = await client.chat([{"role": "user", "content": "Hi"}])
@@ -87,12 +90,13 @@ class TestAsyncLLMClient:
         assert result == "Async Hello!"
 
     @patch("autoyara.llm.async_client.AsyncOpenAI")
+    @pytest.mark.asyncio
     async def test_prompt_single_turn(self, mock_openai):
         from autoyara.llm import AsyncLLMClient
 
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "Prompt response"
-        mock_openai.return_value.chat.completions.create.return_value = mock_response
+        mock_openai.return_value.chat.completions.create = AsyncMock(return_value=mock_response)
 
         client = AsyncLLMClient(api_key="test-key")
         result = await client.prompt("What is that?")
@@ -116,12 +120,13 @@ class TestCreateFunctions:
         assert client.model == "gpt-4o"
 
     @patch("autoyara.llm.async_client.AsyncOpenAI")
+    @pytest.mark.asyncio
     async def test_create_async_client(self, mock_openai):
         from autoyara.llm import AsyncLLMClient, create_async_client
 
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "test"
-        mock_openai.return_value.chat.completions.create.return_value = mock_response
+        mock_openai.return_value.chat.completions.create = AsyncMock(return_value=mock_response)
 
         client = await create_async_client(api_key="my-key", model="gpt-4o")
         assert isinstance(client, AsyncLLMClient)
