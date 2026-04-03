@@ -39,6 +39,9 @@ env/
 htmlcov/
 .tox/
 
+# 本地配置文件
+configs/config.yaml
+
 # Logs
 logs/
 *.log
