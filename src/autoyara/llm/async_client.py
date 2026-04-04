@@ -1,3 +1,5 @@
+import inspect
+
 from openai import AsyncOpenAI
 
 DEFAULT_MODEL = "gpt-4o"
@@ -23,6 +25,21 @@ class AsyncLLMClient:
 
     async def prompt(self, text: str) -> str:
         return await self.chat([{"role": "user", "content": text}])
+
+    async def close(self) -> None:
+        close_method = getattr(self.client, "close", None)
+        if not callable(close_method):
+            return
+        result = close_method()
+        if inspect.isawaitable(result):
+            await result
+
+    async def __aenter__(self) -> "AsyncLLMClient":
+        return self
+
+    async def __aexit__(self, _exc_type, _exc_val, _exc_tb) -> bool:
+        await self.close()
+        return False
 
 
 async def create_async_client(

@@ -71,6 +71,15 @@ class TestSyncLLMClient:
 
         assert result == ""
 
+    @patch("autoyara.llm.sync_client.OpenAI")
+    def test_context_manager_calls_close(self, mock_openai):
+        from autoyara.llm import SyncLLMClient
+
+        with SyncLLMClient(api_key="test-key") as client:
+            assert isinstance(client, SyncLLMClient)
+
+        mock_openai.return_value.close.assert_called_once()
+
 
 class TestAsyncLLMClient:
     """Tests for AsyncLLMClient."""
@@ -102,6 +111,18 @@ class TestAsyncLLMClient:
         result = await client.prompt("What is that?")
 
         assert result == "Prompt response"
+
+    @patch("autoyara.llm.async_client.AsyncOpenAI")
+    @pytest.mark.asyncio
+    async def test_async_context_manager_calls_close(self, mock_openai):
+        from autoyara.llm import AsyncLLMClient
+
+        mock_openai.return_value.close = AsyncMock(return_value=None)
+
+        async with AsyncLLMClient(api_key="test-key") as client:
+            assert isinstance(client, AsyncLLMClient)
+
+        mock_openai.return_value.close.assert_awaited_once()
 
 
 class TestCreateFunctions:

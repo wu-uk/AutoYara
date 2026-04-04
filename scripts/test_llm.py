@@ -5,13 +5,18 @@ import sys
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from autoyara.llm import SyncLLMClient
+from configs.config import get_openai_api_key  # noqa: E402
+
+from autoyara.llm import SyncLLMClient  # noqa: E402
 
 
 def test_sync_client():
-    api_key = input("Enter OpenAI API Key: ").strip()
+    api_key = get_openai_api_key().strip()
+    if not api_key:
+        api_key = input("Enter OpenAI API Key: ").strip()
     if not api_key:
         print("API key is required.")
         return 1

@@ -24,6 +24,18 @@ class SyncLLMClient:
     def prompt(self, text: str) -> str:
         return self.chat([{"role": "user", "content": text}])
 
+    def close(self) -> None:
+        close_method = getattr(self.client, "close", None)
+        if callable(close_method):
+            close_method()
+
+    def __enter__(self) -> "SyncLLMClient":
+        return self
+
+    def __exit__(self, _exc_type, _exc_val, _exc_tb) -> bool:
+        self.close()
+        return False
+
 
 def create_sync_client(
     api_key: str,
