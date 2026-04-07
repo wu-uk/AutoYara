@@ -55,10 +55,12 @@ class CVEItem:
     # False = 源文件不可用，代码内容仅来自 diff 上下文窗口
     is_complete: bool = True
 
+
 # YARA规则验证结果
 @dataclass(slots=True)
 class ValidationResult:
     """YARA规则验证结果模型。"""
+
     cve_id: str
     # fixed文件是否正确（通过则正确）
     fixed_matched: bool
@@ -75,4 +77,4 @@ class ValidationResult:
 # 采集器对外输出的统一类型别名：单条或多条 CVEItem
 CVEResult = CVEItem | list[CVEItem]
 
-__all__ = ["CollectorConfig", "CVEItem", "CVEResult","ValidationResult"]
+__all__ = ["CollectorConfig", "CVEItem", "CVEResult", "ValidationResult"]

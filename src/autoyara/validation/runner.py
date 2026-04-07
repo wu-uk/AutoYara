@@ -1,4 +1,3 @@
-
 # /tmp/cve_id/cve_id.json
 # /tmp/cve_id/cve_id.yara
 import os
@@ -12,17 +11,17 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # 内部模块
-from configs.config import settings
+from configs.config import settings  # noqa: E402
 
-from autoyara.models import ValidationResult
+from autoyara.models import ValidationResult  # noqa: E402
 
 yara_path = Path(project_root) / "tools" / "yara64.exe"
 
 FIXED_ELF_PATH = settings.fixed_elf_path
 UNFIXED_ELF_PATH = settings.unfixed_elf_path
 
-def checkcve(cve_id):
 
+def checkcve(cve_id):
     cve_json_path = Path(settings.data_dir) / "processed" / cve_id / f"{cve_id}.json"
     cve_yara_path = Path(settings.data_dir) / "processed" / cve_id / f"{cve_id}.yara"
 
@@ -67,6 +66,5 @@ def checkcve(cve_id):
         fixed_matched=fixed_matched,
         unfixed_matched=unfixed_matched,
         return_code=return_code,
-        message=message
+        message=message,
     )
-

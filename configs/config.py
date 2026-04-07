@@ -35,11 +35,13 @@ class Settings:
             self.python_path,
             str(PROJECT_ROOT / "src" / "autoyara" / "ida" / "server.py"),
         ]
+
     @property
     def data_dir(self) -> str:
         data_dir = os.path.join(PROJECT_ROOT, "data")
         os.makedirs(data_dir, exist_ok=True)
         return data_dir
+
 
 def _load_settings() -> Settings:
     if not CONFIG_PATH.exists():
