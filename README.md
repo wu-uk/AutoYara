@@ -51,6 +51,14 @@ uv sync --extra dev
 uv run pytest tests/
 ```
 
+### 3. 提取函数 Hex
+
+输入 ELF 文件和函数名，直接调用 IDA 模块提取函数 Hex：
+
+```bash
+uv run python scripts/run_ida_extract_hex.py <elf_file_path> <function_name>
+```
+
 ## 下一步
 
 - 落地数据模型与中间产物 schema
