@@ -1,0 +1,4 @@
+PYTHON_PATH: "F:/ida9.1/ida9.1/python311/python.exe"
+IDA_PATH: "F:/ida9.1/ida9.1/idat.exe"
+OPENAI_API_KEY: "sk-z3BGQQQb33t1vIXbVQWAYS8Z1sqiryEf6mYuAARpj20PgyYQ"
+OPENAI_BASE_URL: "https://www.dmxapi.cn/v1"
