@@ -34,7 +34,7 @@ asyncio.run(main())
 
 ## Configuration
 
-Add to `configs/config.yaml`:
+Add to `config.yaml` in the project root:
 
 ```yaml
 OPENAI_API_KEY: "your-openai-api-key"

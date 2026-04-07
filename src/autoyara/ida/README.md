@@ -9,8 +9,8 @@
 	 ```
 	 PYTHON_PATH IDA_PATH
 	 ```
-	 - `PYTHON_PATH`：ida的Python解释器路径，在/configs/config中。
-	 - `IDA_PATH`：IDA Pro的可执行文件路径，在/configs/config中。
+	 - `PYTHON_PATH`：ida的Python解释器路径，在根目录 `config.yaml` 中配置。
+	 - `IDA_PATH`：IDA Pro的可执行文件路径，在根目录 `config.yaml` 中配置。
 
 
 2. 运行agent并开启MCP，ai可以调用./mcptools中记录的工具
