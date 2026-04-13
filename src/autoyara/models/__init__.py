@@ -56,7 +56,25 @@ class CVEItem:
     is_complete: bool = True
 
 
+# YARA规则验证结果
+@dataclass(slots=True)
+class ValidationResult:
+    """YARA规则验证结果模型。"""
+
+    cve_id: str
+    # fixed文件是否正确（通过则正确）
+    fixed_matched: bool
+    # unfixed文件是否正确（不通过则正确）
+    unfixed_matched: bool
+    return_code: int
+    # 0: 均正确
+    # 1: 仅有fixed正确
+    # 2: 仅有unfixed正确
+    # 3: 均不正确
+    message: str = ""
+
+
 # 采集器对外输出的统一类型别名：单条或多条 CVEItem
 CVEResult = CVEItem | list[CVEItem]
 
-__all__ = ["CollectorConfig", "CVEItem", "CVEResult"]
+__all__ = ["CollectorConfig", "CVEItem", "CVEResult", "ValidationResult"]
