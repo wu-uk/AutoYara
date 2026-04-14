@@ -25,7 +25,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from autoyara.collector import CollectorConfig, collect_cve_items  # noqa: E402
+from autoyara.collectors.orchestrate import collect_cve_items  # noqa: E402
+from autoyara.models import CollectorConfig  # noqa: E402
 
 
 def main() -> None:
@@ -34,8 +35,8 @@ def main() -> None:
         year=2026,
         month=3,
         max_links=100,
-        github_token="",
-        gitcode_token="xXp9CZyMdrnj9gpzV7dNYFKR",
+        github_token="",  # 或从环境变量 GITHUB_TOKEN 读取
+        gitcode_token="",  # 或从环境变量 GITCODE_PRIVATE_TOKEN 读取
         http_timeout_sec=25,
     )
     result = collect_cve_items(cfg, delay_between_links_sec=1.0)

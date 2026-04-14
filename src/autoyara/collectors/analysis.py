@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import re
@@ -417,8 +418,152 @@ def parse_fname_from_hint(func_hint):
     hint = func_hint.strip()
     matches = re.findall(r"([a-zA-Z_]\w*)\s*\(", hint)
     if matches:
-        return matches[-1]
+        # C hunk 头多为 `func(a, b)`，取首个标识符；C++ `Class::method(` 取最后一个。
+        return matches[-1] if "::" in hint else matches[0]
     return re.split(r"[(\s]", hint)[0].strip()
+
+
+_FN_LINE_KEYWORDS = frozenset(
+    {
+        "if",
+        "for",
+        "while",
+        "switch",
+        "return",
+        "else",
+        "case",
+        "default",
+        "sizeof",
+        "static",
+        "inline",
+        "extern",
+        "const",
+        "unsigned",
+        "struct",
+        "enum",
+        "typedef",
+    }
+)
+
+
+def _anchor_find_lineno(text: str, code: str) -> int | None:
+    """在 text 中定位与 patch 行匹配的 1-based 行号（精确子串优先，其次空白归一后整行匹配）。"""
+    c = code.strip()
+    if len(c) < 8 or c in ("-", "- -"):
+        return None
+    idx = text.find(c)
+    if idx >= 0:
+        return text.count("\n", 0, idx) + 1
+    norm = re.sub(r"\s+", " ", c)
+    for i, ln in enumerate(text.splitlines(), start=1):
+        if re.sub(r"\s+", " ", ln.strip()) == norm:
+            return i
+    return None
+
+
+def anchor_lineno_in_source(
+    source: str | None, hunk_list: list[dict[str, Any]], *, fixed_side: bool
+) -> int | None:
+    """用 hunk 中较长的 +/- 行在源码里定位行号（1-based），用于纠正 @@ 函数名或行号漂移。"""
+    if not source:
+        return None
+    text = source.replace("\r\n", "\n")
+
+    for h in hunk_list:
+        key = "added" if fixed_side else "removed"
+        for it in h.get(key) or []:
+            ln = _anchor_find_lineno(text, it.get("code", ""))
+            if ln is not None:
+                return ln
+    return None
+
+
+def _snippet_contains_hunk_side_lines(
+    snippet: str, hunk_list: list[dict[str, Any]], *, fixed_side: bool
+) -> bool:
+    """片段是否包含任一较长的 +/- 行（用于判断 extract 是否抽对了函数）。"""
+    for h in hunk_list:
+        key = "added" if fixed_side else "removed"
+        for it in h.get(key) or []:
+            c = (it.get("code") or "").strip()
+            if len(c) < 10:
+                continue
+            if c in snippet:
+                return True
+            n = re.sub(r"\s+", " ", c)
+            if n and any(
+                re.sub(r"\s+", " ", ln.strip()) == n for ln in snippet.splitlines()
+            ):
+                return True
+    return False
+
+
+def infer_fname_before_line(
+    lines: list[str], target_idx: int, max_back: int = 300
+) -> str:
+    """从 target_idx 向上找最近一行「函数定义名(」形式，避开 if/for 等。"""
+    # 同一行内：name( ... ) 且非以 ); 结尾的调用语句
+    def_line = re.compile(r"^[\t ]*([a-zA-Z_]\w*)\s*\([^;]*\)\s*$")
+    call_stmt = re.compile(r"^[\t ]*[a-zA-Z_]\w*\s*\(.*\)\s*;\s*$")
+    for i in range(target_idx, max(-1, target_idx - max_back), -1):
+        raw = lines[i]
+        st = raw.strip()
+        if not st or st.startswith(("#", "/*", "*", "//", "}")):
+            continue
+        if call_stmt.match(raw):
+            continue
+        m = def_line.match(raw)
+        if not m:
+            continue
+        name = m.group(1)
+        if name in _FN_LINE_KEYWORDS:
+            continue
+        return name
+    return ""
+
+
+def extract_function_for_hunks(
+    source: str | None,
+    func_hint: str,
+    ref_line: int,
+    hunk_list: list[dict[str, Any]],
+    *,
+    fixed_side: bool,
+) -> str | None:
+    """结合 @@ 行号与 hunk 锚点行提取函数；修正 @@ 函数名错误时仍能对位。"""
+    if not source:
+        return None
+    text = source.replace("\r\n", "\n")
+    anchor = anchor_lineno_in_source(text, hunk_list, fixed_side=fixed_side)
+    ref_fb = (
+        min(h["new_start"] for h in hunk_list)
+        if fixed_side
+        else min(h["old_start"] for h in hunk_list)
+    )
+    line_no = anchor or ref_fb or ref_line
+    lines = text.splitlines()
+    tidx = min(max(line_no - 1, 0), len(lines) - 1)
+    hint_fname = parse_fname_from_hint(func_hint)
+    inferred = infer_fname_before_line(lines, tidx)
+
+    def by_name(fname: str | None) -> str | None:
+        if not fname:
+            return None
+        return extract_function(text, f"{fname}(void)", line_no)
+
+    # 优先 @@ 函数名；若片段中根本没有 hunk 关键行，再试反向推断（应对 @@ 写错）
+    for fname in (hint_fname, inferred):
+        if not fname:
+            continue
+        out = by_name(fname)
+        if out and _snippet_contains_hunk_side_lines(
+            out, hunk_list, fixed_side=fixed_side
+        ):
+            return out
+    out = by_name(hint_fname) or extract_function(text, func_hint, line_no)
+    if not out and inferred and (not hint_fname or inferred == hint_fname):
+        out = by_name(inferred)
+    return out
 
 
 def extend_signature_start(lines, sig_idx):
@@ -439,43 +584,7 @@ def extend_signature_start(lines, sig_idx):
     return sig_idx
 
 
-def extract_function(
-    source: str | None, func_hint: str, target_lineno: int
-) -> str | None:
-    if not source:
-        return None
-    lines = source.splitlines()
-    n = len(lines)
-    target_idx = min(max(target_lineno - 1, 0), n - 1)
-    fname = parse_fname_from_hint(func_hint)
-    sig_idx = None
-    lookback = min(target_idx + 1, 8000)
-    if fname:
-        for i in range(target_idx, max(target_idx - lookback, -1), -1):
-            line = lines[i]
-            if not line or line[0] in (" ", "\t"):
-                continue
-            s = line.lstrip()
-            if s.startswith(("/*", "*", "//", "#")):
-                continue
-            if fname in line:
-                sig_idx = i
-                break
-    if sig_idx is None and fname:
-        cands = []
-        for i, line in enumerate(lines):
-            if not line or line[0] in (" ", "\t"):
-                continue
-            s = line.lstrip()
-            if s.startswith(("/*", "*", "//", "#")):
-                continue
-            if fname in line:
-                cands.append(i)
-        if cands:
-            sig_idx = min(cands, key=lambda i: abs(i - target_idx))
-    if sig_idx is None:
-        return None
-    sig_idx = extend_signature_start(lines, sig_idx)
+def _match_brace_end(lines: list[str], sig_idx: int, fname: str, n: int) -> int | None:
     depth, found_open, end_idx = 0, False, None
     for i in range(sig_idx, min(sig_idx + 5000, n)):
         if not found_open and i > sig_idx + 8:
@@ -499,9 +608,151 @@ def extract_function(
                     break
         if end_idx is not None:
             break
-    if end_idx is None:
+    return end_idx
+
+
+def extract_function(
+    source: str | None, func_hint: str, target_lineno: int
+) -> str | None:
+    if not source:
         return None
+    lines = source.splitlines()
+    n = len(lines)
+    target_idx = min(max(target_lineno - 1, 0), n - 1)
+    fname = parse_fname_from_hint(func_hint)
+    if not fname:
+        return None
+
+    spans_seen: set[tuple[int, int]] = set()
+    spans: list[tuple[int, int]] = []
+    for i, line in enumerate(lines):
+        if not line or not line.strip():
+            continue
+        s = line.lstrip()
+        if s.startswith(("/*", "*", "//", "#")):
+            continue
+        if fname not in line:
+            continue
+        # 缩进行多为调用点；允许「行首空白 + 函数名起头」或 static，以支持 Tab 缩进的定义行
+        if (
+            line[0] in (" ", "\t")
+            and not s.startswith(fname)
+            and not s.startswith("static")
+        ):
+            continue
+        sig_i = extend_signature_start(lines, i)
+        end_i = _match_brace_end(lines, sig_i, fname, n)
+        if end_i is None:
+            continue
+        key = (sig_i, end_i)
+        if key in spans_seen:
+            continue
+        spans_seen.add(key)
+        spans.append(key)
+
+    if not spans:
+        return None
+
+    containing = [se for se in spans if se[0] <= target_idx <= se[1]]
+    if containing:
+        sig_idx, end_idx = min(containing, key=lambda se: se[1] - se[0])
+    else:
+
+        def edge_dist(se: tuple[int, int]) -> int:
+            s, e = se
+            return (target_idx - e) if target_idx > e else (s - target_idx)
+
+        sig_idx, end_idx = min(spans, key=edge_dist)
+
     return "\n".join(lines[sig_idx : end_idx + 1])
+
+
+def extract_function_by_lineno(source: str | None, target_lineno: int) -> str | None:
+    """在源文件中找包含或紧跟 target_lineno 的函数体，不依赖函数名 hint。
+
+    策略：
+    1. 从 target_lineno 向上扫描找函数签名，要求 end_i >= target_idx
+    2. 若向上找不到（target 在两个函数之间的空行），再向下找最近函数签名
+    """
+    if not source:
+        return None
+    lines = source.splitlines()
+    n = len(lines)
+    target_idx = min(max(target_lineno - 1, 0), n - 1)
+
+    _FUNC_KEYWORDS = frozenset(
+        (
+            "if",
+            "for",
+            "while",
+            "switch",
+            "return",
+            "sizeof",
+            "else",
+            "case",
+            "default",
+            "do",
+        )
+    )
+    _FUNC_PREFIXES = (
+        "static",
+        "inline",
+        "void",
+        "int",
+        "char",
+        "bool",
+        "BOOL",
+        "LITE",
+        "SWTMR",
+        "STATIC",
+        "unsigned",
+        "struct",
+        "enum",
+        "UINT",
+        "INT",
+        "VOID",
+    )
+
+    def _try_find_func_at(sig_i: int) -> str | None:
+        """尝试以 sig_i 为签名起点提取函数，要求函数体包含 target_idx 或紧随其后。"""
+        line = lines[sig_i]
+        if not line or not line.strip():
+            return None
+        s = line.lstrip()
+        if s.startswith(("/*", "*", "//", "#")):
+            return None
+        if line[0] in (" ", "\t") and not s.startswith(_FUNC_PREFIXES):
+            return None
+        if "(" not in line:
+            return None
+        m = re.search(r"\b([a-zA-Z_]\w*)\s*\(", line)
+        if not m:
+            return None
+        fname = m.group(1)
+        if fname in _FUNC_KEYWORDS:
+            return None
+        end_i = _match_brace_end(lines, sig_i, fname, n)
+        if end_i is None:
+            return None
+        # 函数包含 target，或 target 在函数签名之前的紧邻空行内
+        if end_i >= target_idx:
+            actual_sig = extend_signature_start(lines, sig_i)
+            return "\n".join(lines[actual_sig : end_i + 1])
+        return None
+
+    # 1) 向上扫描
+    for i in range(target_idx, max(target_idx - 200, -1), -1):
+        result = _try_find_func_at(i)
+        if result:
+            return result
+
+    # 2) 向下扫描（target 在两个函数之间的空行或紧贴下一函数签名前）
+    for i in range(target_idx + 1, min(target_idx + 20, n)):
+        result = _try_find_func_at(i)
+        if result:
+            return result
+
+    return None
 
 
 def hunk_sequences_from_body(body):
@@ -553,6 +804,84 @@ def _find_seq_in_lines(lines: list[str], seq: list[str], near: int) -> int | Non
     return best_idx
 
 
+def _find_seq_best_in_lines(
+    lines: list[str], seq: list[str], near: int | None = None
+) -> int | None:
+    """在全文件中找与 seq 匹配的起始行；若给定 near（0-based 行索引），优先选距离最近的一处。"""
+    if not seq:
+        return None
+    hi = len(lines) - len(seq)
+    if hi < 0:
+        return None
+    best_idx: int | None = None
+    best_dist = 10**9
+    for i in range(0, hi + 1):
+        chunk = lines[i : i + len(seq)]
+        if _lines_equal_seq(chunk, seq) or _lines_equal_seq(
+            [x.rstrip() for x in chunk], [x.rstrip() for x in seq]
+        ):
+            if near is None:
+                return i
+            d = abs(i - near)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+    return best_idx
+
+
+def realign_hunks_new_starts(
+    new_src: str, hunk_list: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """按「修复后」全文重定位每个 hunk 的 new_start。
+
+    公告补丁里的 @@ 行号常与 fix_sha 拉到的源文件不一致（差数百行），
+    reconstruct 仅在 ±50 行内搜会整段失败，父版本逆向落空后只能误用 git parent
+    或其它降级路径，导致抽到错误函数（如 22695 抽到 colormapped）。
+    """
+    if not new_src or not hunk_list:
+        return hunk_list
+    text = new_src.replace("\r\n", "\n")
+    lines = text.splitlines()
+    out = copy.deepcopy(hunk_list)
+    adjusted = False
+    for h in out:
+        body = h.get("body") or ""
+        if not body:
+            continue
+        old_seq, new_seq = hunk_sequences_from_body(body)
+        near = max(0, int(h.get("new_start", 1)) - 1)
+        found: int | None = None
+        if new_seq:
+            found = _find_seq_best_in_lines(lines, new_seq, near)
+        if found is None:
+            candidates: list[str] = []
+            for raw in body.splitlines():
+                if not raw.startswith(" "):
+                    continue
+                c = raw[1:].rstrip("\n\r")
+                if len(c) < 18:
+                    continue
+                cs = c.strip()
+                if cs.startswith(("/", "*", "//")):
+                    continue
+                candidates.append(c)
+            if candidates:
+                anchor = max(candidates, key=len)
+                found = _find_seq_best_in_lines(lines, [anchor], near)
+        if found is None:
+            continue
+        nl = found + 1
+        old_nl = int(h.get("new_start") or 0)
+        if nl != old_nl:
+            h["new_start"] = nl
+            adjusted = True
+    if adjusted:
+        print(
+            "  [realign] 已按当前源文件对 hunk 的 new_start 重定位（修正 @@ 与 fix 版本错位）"
+        )
+    return out
+
+
 def reconstruct_old_from_new(
     new_src: str | None, hunks: list[dict[str, Any]]
 ) -> str | None:
@@ -599,6 +928,59 @@ def reconstruct_old_from_new(
     return "\n".join(lines)
 
 
+def parent_source_from_diff(
+    new_src: str, hunk_list: list[dict[str, Any]]
+) -> str | None:
+    """由修复后全文 + diff 得到修复前全文。
+
+    先按行号逆向应用 hunk（与补丁基准一致）；若失败（行错位、空白不一致等），
+    再使用 ``build_versions_from_diff`` 的逐 hunk 子串替换（与多 hunk 非连续逻辑一致）。
+    """
+    if not new_src or not hunk_list:
+        return None
+    old = reconstruct_old_from_new(new_src, hunk_list)
+    if old and old.strip() and old.strip() != new_src.strip():
+        print("  [reconstruct] 行号逆向得到父版本全文")
+        return old
+    v_fb, f_fb = build_versions_from_diff(hunk_list, full_src=new_src, mode_src="new")
+    if (
+        v_fb
+        and f_fb
+        and not v_fb.lstrip().startswith("/* patch context")
+        and v_fb.strip() != f_fb.strip()
+    ):
+        print("  [reconstruct] 逐 hunk 子串替换得到父版本全文")
+        return v_fb
+    return None
+
+
+def diff_hunk_lines_embedded(
+    vuln_text: str, fixed_text: str, hunk_list: list[dict[str, Any]]
+) -> bool:
+    """检查 diff 中是否有实质 +/- 行出现在对应版本提取结果里（按行 strip 比较）。
+
+    用于发现「关键变更行」与「整函数提取」错位（多 hunk、父提交与补丁基准不一致等）。
+    若仅有上下文行、无 +/-，视为通过。
+    """
+    vuln_strips = {ln.strip() for ln in vuln_text.splitlines() if ln.strip()}
+    fix_strips = {ln.strip() for ln in fixed_text.splitlines() if ln.strip()}
+    saw_change = False
+    for h in hunk_list:
+        body = h.get("body") or ""
+        for raw in body.splitlines():
+            if not raw or raw[0] not in "+-":
+                continue
+            code = raw[1:].strip()
+            if len(code) < 5:
+                continue
+            saw_change = True
+            if raw[0] == "-" and code in vuln_strips:
+                return True
+            if raw[0] == "+" and code in fix_strips:
+                return True
+    return not saw_change
+
+
 def derive_vulnerable(
     fixed_func: str | None, all_hunks: list[dict[str, Any]]
 ) -> str | None:
@@ -626,6 +1008,24 @@ def derive_vulnerable(
     if not changed:
         return None
     return result
+
+
+def _hunk_vuln_fixed_text_windows(h: dict[str, Any]) -> tuple[str, str]:
+    """单 hunk 的 (漏洞侧拼接文本, 修复侧拼接文本)，不含 patch 注释。"""
+    hl, fl = [], []
+    for raw in (h.get("body") or "").splitlines():
+        if not raw:
+            continue
+        k = raw[0]
+        c = raw[1:] if k in "+- " else raw
+        if k == " ":
+            hl.append(c)
+            fl.append(c)
+        elif k == "-":
+            hl.append(c)
+        elif k == "+":
+            fl.append(c)
+    return "\n".join(hl), "\n".join(fl)
 
 
 def build_versions_from_diff(
@@ -690,6 +1090,26 @@ def build_versions_from_diff(
             fixed_full = full_src.replace(src_window, other_window, 1)
         if vuln_full.strip() != fixed_full.strip():
             return vuln_full, fixed_full
+
+    # 多段 hunk 在源文件中不连续，拼接后的 window 无法一次 in full_src：逐 hunk 替换
+    if len(hunk_list) > 1:
+        cur = full_src
+        ok = True
+        sort_key = "old_start" if mode_src == "old" else "new_start"
+        for h in sorted(hunk_list, key=lambda x: x.get(sort_key, 0), reverse=True):
+            vuln_w, fixed_w = _hunk_vuln_fixed_text_windows(h)
+            if mode_src == "new":
+                sw, ow = fixed_w, vuln_w
+            else:
+                sw, ow = vuln_w, fixed_w
+            if not sw or sw not in cur:
+                ok = False
+                break
+            cur = cur.replace(sw, ow, 1)
+        if ok and cur.strip() != full_src.strip():
+            if mode_src == "new":
+                return cur, full_src
+            return full_src, cur
 
     # 定位失败（行内空白等原因）：退回 diff 窗口
     vuln_snippet = patch_snippet(hunk_list, "old")

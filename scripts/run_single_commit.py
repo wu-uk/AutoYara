@@ -21,13 +21,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from autoyara.collector import CollectorConfig, collect_cve_items  # noqa: E402
+from autoyara.collectors.orchestrate import collect_cve_items  # noqa: E402
+from autoyara.models import CollectorConfig  # noqa: E402
 
 # --- 按你的目标修改 ---
 # 支持 gitee / gitcode / github commit URL，例如：
 #   "https://gitcode.com/openharmony/kernel_linux_5.10/commit/<sha>"
 #   "https://github.com/openharmony/kernel_linux_5.10/commit/<sha>"
-COMMIT_URL = "https://gitcode.com/openharmony/kernel_linux_5.10/commit/0000000"
+COMMIT_URL = "https://link.gitcode.com/?target=https%3A%2F%2Fgitee.com%2Fopenharmony%2Fkernel_linux_5.10%2Fcommit%2Fa90e0227223e555ab2e4f3501c96bba3beaf67ab&from=https%3A%2F%2Fgitcode.com%2Fopenharmony%2Fsecurity%2Fblob%2Fmaster%2Fzh%2Fsecurity-disclosure%2F2025%2F2025-09.md&lang=zh&theme=white"
 PATCH_PATH: str | None = None  # 例: str(REPO_ROOT / "local.patch")
 CVE_LABEL = "MANUAL"
 

@@ -14,7 +14,9 @@ UPSTREAM = {
 
 
 def fetch_bulletin(year, month):
+    # 与网页 blob/.../security-disclosure/... 同源；优先 GitCode raw（OpenHarmony 主镜像）
     for url in [
+        f"https://gitcode.com/openharmony/security/raw/master/zh/security-disclosure/{year}/{year}-{month:02d}.md",
         f"https://gitee.com/openharmony/security/raw/master/zh/security-disclosure/{year}/{year}-{month:02d}.md",
         f"https://raw.githubusercontent.com/openharmony/security/master/zh/security-disclosure/{year}/{year}-{month:02d}.md",
     ]:

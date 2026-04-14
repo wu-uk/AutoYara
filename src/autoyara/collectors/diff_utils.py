@@ -4,9 +4,15 @@ from typing import Any
 
 from .gitcode import (
     fetch_gitcode_commit_diff,
+    fetch_gitcode_file_blob,
     fetch_gitcode_pr,
     fetch_gitcode_pr_commits,
     gitcode_private_token,
+)
+from .gitee_pr import (
+    gitee_pull_api_url,
+    scrape_gitee_pr_head_sha,
+    try_gitee_pr_unified_diff,
 )
 from .http_client import get
 from .internal_types import CrawlerLink
@@ -163,6 +169,16 @@ def fetch_diff_text(item: CrawlerLink):
             if t and ("diff --git" in t or "@@" in t):
                 print(f"  [OK] {len(t)} bytes")
                 return t, repo, sha
+        gc_raw = f"https://gitcode.com/{owner}/{repo}/raw/{sha}/{fpath}"
+        print("  [patch] " + gc_raw[:90])
+        t = get(gc_raw)
+        if t and ("diff --git" in t or "@@" in t):
+            print(f"  [OK] gitcode raw {len(t)} bytes")
+            return t.strip(), repo, sha
+        t_blob = fetch_gitcode_file_blob(owner, repo, sha, fpath)
+        if t_blob and ("diff --git" in t_blob or "@@" in t_blob):
+            print(f"  [OK] gitcode API contents {len(t_blob)} bytes")
+            return t_blob.strip(), repo, sha
         return None, repo, sha
     if ltype == "pr":
         m = re.match(
@@ -176,6 +192,12 @@ def fetch_diff_text(item: CrawlerLink):
         sha = None
         candidate_shas = []
         is_gitcode = "gitcode.com" in url.lower()
+
+        if "gitee.com" in url.lower():
+            tdiff = try_gitee_pr_unified_diff(owner, repo, num)
+            if tdiff:
+                sha_hint = scrape_gitee_pr_head_sha(owner, repo, num)
+                return tdiff, oh_repo, sha_hint
 
         if is_gitcode:
             # 1. 有 token 时走 GitCode PR API 取 merge commit
@@ -210,7 +232,7 @@ def fetch_diff_text(item: CrawlerLink):
 
         # 4. Gitee 镜像 API（openharmony 仓库在 gitee 也有镜像）
         for api_owner in [owner, "openharmony"]:
-            t = get(f"https://gitee.com/api/v5/repos/{api_owner}/{repo}/pulls/{num}")
+            t = get(gitee_pull_api_url(api_owner, repo, num))
             if t:
                 try:
                     s = json.loads(t).get("merge_commit_sha")
@@ -237,6 +259,24 @@ def fetch_diff_text(item: CrawlerLink):
                 f"  [pr-commit] choose sha={best_sha[:12]} from {len(candidate_shas)} candidates"
             )
             return best_diff, repo, best_sha
+        for host in (
+            f"https://gitcode.com/{owner}/{repo}",
+            f"https://gitee.com/{owner}/{repo}",
+        ):
+            for suf in (
+                f"pulls/{num}.diff",
+                f"pull/{num}.diff",
+                f"merge_requests/{num}.diff",
+            ):
+                pu = f"{host}/{suf}"
+                print("  [pr] " + pu[:100])
+                t = get(pu)
+                if t and "diff --git" in t:
+                    print(f"  [OK] PR unified diff {len(t)} bytes")
+                    sha_fb = sha
+                    if not sha_fb and "gitee.com" in host:
+                        sha_fb = scrape_gitee_pr_head_sha(owner, repo, num)
+                    return t.strip(), repo, sha_fb
         return None, repo, sha
     return None, oh_repo, None
 
