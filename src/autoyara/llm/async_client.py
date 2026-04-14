@@ -1,20 +1,19 @@
 import inspect
-
 from openai import AsyncOpenAI
-
-DEFAULT_MODEL = "gpt-4o"
-
+from autoyara.config import settings
 
 class AsyncLLMClient:
     def __init__(
         self,
-        api_key: str,
-        model: str = DEFAULT_MODEL,
+        api_key: str | None = None,
+        model: str | None = None,
         base_url: str | None = None,
         **kwargs,
     ):
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, **kwargs)
-        self.model = model
+        self.api_key = api_key or settings.openai_api_key
+        self.base_url = base_url or settings.openai_base_url
+        self.model = model or settings.model_name
+        self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, **kwargs)
 
     async def chat(self, messages: list[dict]) -> str:
         response = await self.client.chat.completions.create(
@@ -43,8 +42,8 @@ class AsyncLLMClient:
 
 
 async def create_async_client(
-    api_key: str,
-    model: str = DEFAULT_MODEL,
+    api_key: str | None = None,
+    model: str | None = None,
     base_url: str | None = None,
     **kwargs,
 ) -> AsyncLLMClient:

@@ -46,6 +46,14 @@ class Settings:
         return self._config.get("OPENAI_API_KEY", "")
 
     @property
+    def openai_base_url(self) -> str | None:
+        return self._config.get("OPENAI_BASE_URL", None)
+
+    @property
+    def model_name(self) -> str:
+        return self._config.get("MODEL_NAME", "gpt-4o")
+
+    @property
     def server_cmd(self) -> list[str]:
         return [
             self.python_path,

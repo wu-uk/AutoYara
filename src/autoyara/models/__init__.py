@@ -59,4 +59,24 @@ class CVEItem:
 # 采集器对外输出的统一类型别名：单条或多条 CVEItem
 CVEResult = CVEItem | list[CVEItem]
 
-__all__ = ["CollectorConfig", "CVEItem", "CVEResult"]
+
+@dataclass(slots=True)
+class AgentTask:
+    """Agent 处理任务"""
+
+    cve_id: str
+    target_binary: str  # ELF 文件路径
+    function_name: str
+    extra_context: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class AgentResult:
+    """Agent 执行结果"""
+
+    success: bool
+    output: str
+    steps: list[dict[str, Any]] = field(default_factory=list)
+
+
+__all__ = ["CollectorConfig", "CVEItem", "CVEResult", "AgentTask", "AgentResult"]

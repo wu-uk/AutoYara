@@ -1,18 +1,18 @@
 from openai import OpenAI
-
-DEFAULT_MODEL = "gpt-5"
-
+from autoyara.config import settings
 
 class SyncLLMClient:
     def __init__(
         self,
-        api_key: str,
-        model: str = DEFAULT_MODEL,
+        api_key: str | None = None,
+        model: str | None = None,
         base_url: str | None = None,
         **kwargs,
     ):
-        self.client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)
-        self.model = model
+        self.api_key = api_key or settings.openai_api_key
+        self.base_url = base_url or settings.openai_base_url
+        self.model = model or settings.model_name
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url, **kwargs)
 
     def chat(self, messages: list[dict]) -> str:
         response = self.client.chat.completions.create(
@@ -38,8 +38,8 @@ class SyncLLMClient:
 
 
 def create_sync_client(
-    api_key: str,
-    model: str = DEFAULT_MODEL,
+    api_key: str | None = None,
+    model: str | None = None,
     base_url: str | None = None,
     **kwargs,
 ) -> SyncLLMClient:

@@ -257,8 +257,8 @@ main()
         p = subprocess.Popen(
             ida_cmd,
             stdin=subprocess.DEVNULL,
-            stdout=None,
-            stderr=None,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             close_fds=True,
             creationflags=creationflags,
         )
