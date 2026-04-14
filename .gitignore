@@ -39,6 +39,9 @@ env/
 htmlcov/
 .tox/
 
+# 本地配置文件
+configs/config.yaml
+
 # Logs
 logs/
 *.log
@@ -46,6 +49,15 @@ logs/
 # Temporary files
 tmp/
 *.tmp
+
+# 爬虫/脚本生成的产物（保留 output/ 目录用 .gitkeep）
+output/*.json
+output/*.txt
+output/*.diff
+output/*.html
+output/*.log
+result.json
+report.txt
 
 # OS
 .DS_Store

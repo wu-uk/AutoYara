@@ -12,7 +12,11 @@ license = {text = "MIT"}
 authors = [
     {name = "AutoYara Team"}
 ]
-dependencies = []
+dependencies = [
+    "requests>=2.28.0",
+    "urllib3>=1.26.0",
+    "openai>=1.0.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -20,6 +24,7 @@ dev = [
     "ruff>=0.3.4",
     "pre-commit>=3.6.0",
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -62,3 +67,4 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # unused imports allowed in __init__.py
+"scripts/*.py" = ["E402", "I001"]  # scripts need sys.path setup before autoyara imports
