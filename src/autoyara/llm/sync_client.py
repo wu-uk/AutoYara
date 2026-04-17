@@ -1,16 +1,54 @@
+import os
+import sys
+
 from openai import OpenAI
 
-DEFAULT_MODEL = "gpt-5"
+DEFAULT_MODEL = "deepseek/deepseek-v3.2"
+DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def get_effective_openai_credentials() -> tuple[str, str | None]:
+    """合并环境变量与 ``configs/config.yaml`` 中的 OpenAI 凭据。
+
+    优先级：环境变量 > config.yaml > DEFAULT_BASE_URL 兜底。
+    """
+    env_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    env_base = (os.environ.get("OPENAI_BASE_URL") or "").strip() or None
+    cfg_key, cfg_base = "", None
+    try:
+        from configs.config import settings
+
+        cfg_key = (getattr(settings, "openai_api_key", None) or "").strip()
+        cfg_base = (getattr(settings, "openai_base_url", None) or "").strip() or None
+    except Exception:
+        pass
+    api_key = env_key or cfg_key
+    base_url = env_base or cfg_base or DEFAULT_BASE_URL
+    return api_key, base_url
+
+
+def ensure_llm_api_key_or_exit(*, script_hint: str = "") -> None:
+    """在启用 LLM 的脚本入口调用：未配置 API key 则打印说明并以退出码 2 结束。"""
+    key, _ = get_effective_openai_credentials()
+    if key:
+        return
+    lines = [
+        "错误：已启用 LLM 审查，但未检测到 OPENAI_API_KEY。",
+        "",
+        "请任选其一配置：",
+        "  1) 环境变量：OPENAI_API_KEY（可选 OPENAI_BASE_URL）",
+        "  2) 仓库根目录 configs/config.yaml 中填写 OPENAI_API_KEY",
+        "",
+        "或使用 --no-llm / --no-quality-check 跳过审查。",
+    ]
+    if script_hint:
+        lines = [lines[0], "", script_hint, ""] + lines[1:]
+    sys.stderr.write("\n".join(lines) + "\n")
+    raise SystemExit(2)
 
 
 def _default_openai_credentials() -> tuple[str, str | None]:
-    try:
-        from configs.config import settings
-    except Exception:
-        return "", None
-    api_key = settings.openai_api_key.strip()
-    base_url = settings.openai_base_url.strip() or None
-    return api_key, base_url
+    return get_effective_openai_credentials()
 
 
 class SyncLLMClient:

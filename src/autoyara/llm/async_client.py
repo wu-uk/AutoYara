@@ -2,17 +2,9 @@ import inspect
 
 from openai import AsyncOpenAI
 
-DEFAULT_MODEL = "gpt-4o"
+from autoyara.llm.sync_client import get_effective_openai_credentials
 
-
-def _default_openai_credentials() -> tuple[str, str | None]:
-    try:
-        from configs.config import settings
-    except Exception:
-        return "", None
-    api_key = settings.openai_api_key.strip()
-    base_url = settings.openai_base_url.strip() or None
-    return api_key, base_url
+DEFAULT_MODEL = "deepseek/deepseek-v3.2"
 
 
 class AsyncLLMClient:
@@ -23,7 +15,7 @@ class AsyncLLMClient:
         base_url: str | None = None,
         **kwargs,
     ):
-        default_api_key, default_base_url = _default_openai_credentials()
+        default_api_key, default_base_url = get_effective_openai_credentials()
         resolved_api_key = (api_key or "").strip() or default_api_key
         resolved_base_url = base_url or default_base_url
         self.client = AsyncOpenAI(

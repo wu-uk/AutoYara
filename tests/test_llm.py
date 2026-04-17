@@ -144,7 +144,7 @@ class TestAsyncLLMClient:
 
         mock_openai.return_value.close.assert_awaited_once()
 
-    @patch("autoyara.llm.async_client._default_openai_credentials")
+    @patch("autoyara.llm.async_client.get_effective_openai_credentials")
     @patch("autoyara.llm.async_client.AsyncOpenAI")
     @pytest.mark.asyncio
     async def test_use_settings_as_default(self, mock_openai, mock_default_credentials):

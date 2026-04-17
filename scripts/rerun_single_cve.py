@@ -38,7 +38,10 @@ from autoyara.collectors.oh_crawler.cli import (  # noqa: E402
     _apply_tokens_from_config_yaml,
 )
 from autoyara.collectors.oh_crawler.pipeline import process_item  # noqa: E402
-from autoyara.llm.sync_client import SyncLLMClient  # noqa: E402
+from autoyara.llm.sync_client import (  # noqa: E402
+    SyncLLMClient,
+    ensure_llm_api_key_or_exit,
+)
 from autoyara.models import (
     sync_function_line_arrays,
     to_legacy_result_dict,
@@ -100,6 +103,31 @@ def _build_crawler_item(
     patch_body: str | None,
 ) -> dict:
     url = re.sub(r"[?#].*$", "", url.strip())
+    patch_m = re.match(
+        r"https?://(?:gitee|gitcode)\.com/([^/]+)/([^/]+)/blob/([0-9a-f]+)/(.+)",
+        url,
+        re.I,
+    )
+    if patch_m:
+        _, repo, sha, _ = (
+            patch_m.group(1),
+            patch_m.group(2),
+            patch_m.group(3),
+            patch_m.group(4),
+        )
+        item_patch: dict = {
+            "url": url,
+            "cve": cve_id,
+            "repo": meta_it.get("repo", repo),
+            "severity": meta_it.get("severity", ""),
+            "version_label": meta_it.get("version", ""),
+            "vuln_title": meta_it.get("vuln_title", ""),
+            "url_type": "patch",
+            "fix_sha": sha,
+        }
+        if patch_body:
+            item_patch["patch_body"] = patch_body
+        return item_patch
     pr_m = re.match(
         r"https?://(?:gitee|gitcode)\.com/([^/]+)/([^/]+)/(?:pulls|pull|merge_requests)/(\d+)",
         url,
@@ -126,7 +154,7 @@ def _build_crawler_item(
     )
     if not cm:
         raise SystemExit(
-            f"  错误：URL 格式不支持（需要 gitee/gitcode 的 commit 或 PR）\n  URL: {url}"
+            f"  错误：URL 格式不支持（需要 gitee/gitcode 的 commit / PR / blob patch）\n  URL: {url}"
         )
     repo, sha = cm.group(2), cm.group(3)
     item = {
@@ -254,6 +282,8 @@ def main() -> None:
         print(f"  本地 patch: {pf.name}  ({len(patch_body)} 字节)")
 
     do_qc = not args.no_quality_check
+    if do_qc:
+        ensure_llm_api_key_or_exit()
     print(f"  质量审查: {'启用' if do_qc else '跳过'}")
     print(f"  待处理链接数: {len(pairs)}")
     for u, meta in pairs:

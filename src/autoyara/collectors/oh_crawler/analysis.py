@@ -193,9 +193,14 @@ def parse_vuln_desc_from_patch_text(diff_text):
     if not diff_text or not isinstance(diff_text, str):
         return {"title": "", "description": "", "cve": ""}
     title = ""
-    m = re.search(r"(?im)^Subject:\s*(?:\[[^\]]+\]\s*)?(.+)$", diff_text)
+    # 支持 RFC 2822 折叠续行（续行以空白字符开头）
+    m = re.search(
+        r"(?im)^Subject:\s*(?:\[[^\]]+\]\s*)?(.+(?:\n[ \t]+.+)*)",
+        diff_text,
+    )
     if m:
-        title = m.group(1).strip()
+        raw = re.sub(r"\n[ \t]+", " ", m.group(1))
+        title = raw.strip()
     cve = ""
     cve_m = re.search(r"\b(CVE-\d{4}-\d+)\b", diff_text, re.I)
     if cve_m:

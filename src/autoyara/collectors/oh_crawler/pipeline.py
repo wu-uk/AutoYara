@@ -14,7 +14,7 @@ from autoyara.llm.quality_check import (
     check_quality,
     summarize_bulletin_fields,
 )
-from autoyara.llm.sync_client import SyncLLMClient
+from autoyara.llm.sync_client import SyncLLMClient, ensure_llm_api_key_or_exit
 from autoyara.models import (
     AutoYaraDataModel,
     CrawlerItem,
@@ -37,6 +37,46 @@ from .analysis import (
 from .diff_utils import fetch_diff_text, merge_version_label_from_patch, parse_diff_full
 from .discovery import UPSTREAM
 from .nvd_fallback import nvd_supplement, prefill_description_from_nvd
+
+
+def _should_trigger_nvd_fallback(
+    qc_first: QualityCheckResult,
+) -> tuple[bool, list[str], str]:
+    """判定首轮 LLM 后是否应触发 NVD 兜底。
+
+    触发条件（任一满足）：
+    1. overall_ok 为 False（常规不完整）
+    2. score < 1.0（字段级结论与 overall 不一致时仍强制兜底）
+    3. reason 命中“描述不清晰/不完整”等语义关键词（用户明确要求）
+    """
+    failed = qc_first.failed_fields()
+    reason = (qc_first.reason or "").strip()
+    score = qc_first.score
+    reason_low_quality = bool(
+        reason
+        and re.search(
+            r"不清晰|不完整|描述.*不足|描述.*不合格|信息不足|insufficient|unclear|incomplete",
+            reason,
+            re.I,
+        )
+    )
+    score_not_full = score is not None and score < 1.0
+    trigger = (not qc_first.overall_ok) or score_not_full or reason_low_quality
+    trigger_reason = (
+        "overall_fail"
+        if not qc_first.overall_ok
+        else (
+            "score_not_full"
+            if score_not_full
+            else "reason_low_quality"
+            if reason_low_quality
+            else ""
+        )
+    )
+    # score/reason 触发时，若 failed 为空，至少补 description（用户强调描述不清晰也要兜底）
+    if trigger and not failed and (score_not_full or reason_low_quality):
+        failed = ["description", "vulnerable_function", "fixed_function"]
+    return trigger, failed, trigger_reason
 
 
 def process_item(
@@ -91,6 +131,7 @@ def process_item(
 
     _own_client = False
     if quality_check and llm_client is None:
+        ensure_llm_api_key_or_exit()
         llm_client = SyncLLMClient()
         _own_client = True
 
@@ -324,29 +365,32 @@ def process_item(
                         review_round="第1轮-爬取",
                     )
 
-                # NVD：第 1 轮 LLM 明确判不完整，或 LLM 请求失败但爬取结果仍是补丁窗口
+                # NVD：第 1 轮 LLM 不完整 / 低分 / 描述不清晰，或 LLM 请求失败但结果仍是补丁窗口
                 if (
                     quality_check
                     and qc_first is not None
-                    and not qc_first.overall_ok
                     and cve_id
                     and re.match(r"CVE-\d{4}-\d+", cve_id, re.I)
                 ):
-                    failed = qc_first.failed_fields()
+                    trigger, failed, trigger_reason = _should_trigger_nvd_fallback(
+                        qc_first
+                    )
                     if getattr(qc_first, "llm_request_failed", False):
                         _marker = "patch context - source file unavailable"
                         if _marker in (vuln_func or "") or _marker in (
                             fixed_func or ""
                         ):
+                            trigger = True
+                            trigger_reason = "llm_failed_with_patch_context"
                             failed = [
                                 "vulnerable_function",
                                 "fixed_function",
                                 "description",
                             ]
-                    if failed:
+                    if trigger:
                         print(
-                            f"  [nvd-fallback] 第1轮不完整项: {failed}，"
-                            "从 NVD API / GitHub References 补全…"
+                            f"  [nvd-fallback] 触发原因={trigger_reason} 目标字段={failed}，"
+                            "从 NVD References(Patch) / GitHub commit 补全…"
                         )
                     supplement = (
                         nvd_supplement(
@@ -356,7 +400,7 @@ def process_item(
                             current_vuln_func=vuln_func or "",
                             current_fixed_func=fixed_func or "",
                         )
-                        if failed
+                        if trigger and failed
                         else {}
                     )
                     if supplement.get("description"):
@@ -406,7 +450,7 @@ def process_item(
                             score=None,
                             passed_checks=[],
                             failed_checks=[
-                                "LLM 调用失败（未评定内容，非描述/函数不合格）",
+                                "LLM 调用失败（未评定内容，非描述/函数不合格）"
                             ],
                             details=qc_result.reason,
                         )
