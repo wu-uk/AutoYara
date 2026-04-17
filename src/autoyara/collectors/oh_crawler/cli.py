@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from autoyara.llm.sync_client import SyncLLMClient
+from autoyara.llm.sync_client import SyncLLMClient, ensure_llm_api_key_or_exit
 from autoyara.models import sync_function_line_arrays, to_legacy_result_dict
 
 from .discovery import fetch_bulletin, parse_all_links
@@ -264,9 +264,10 @@ def main(argv=None):
     all_results = []
     incomplete_results = []
 
-    llm_client = SyncLLMClient() if do_quality_check else None
     if do_quality_check:
+        ensure_llm_api_key_or_exit()
         print("\n[质量审查] 已启用 LLM 审查，结果将标注完整性")
+    llm_client = SyncLLMClient() if do_quality_check else None
 
     try:
         for i, item in enumerate(all_links, 1):

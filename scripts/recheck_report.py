@@ -19,7 +19,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from autoyara.llm.quality_check import check_quality
-from autoyara.llm.sync_client import SyncLLMClient
+from autoyara.llm.sync_client import SyncLLMClient, ensure_llm_api_key_or_exit
 from autoyara.models import sync_function_line_arrays
 
 
@@ -53,6 +53,7 @@ def main() -> None:
     total = len(items)
     print(f"[recheck] 共 {total} 条，开始 LLM 最终审查...\n")
 
+    ensure_llm_api_key_or_exit()
     client = SyncLLMClient()
     ok_count = 0
     fail_count = 0

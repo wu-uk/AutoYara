@@ -10,12 +10,15 @@ CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 @dataclass(slots=True)
 class Settings:
-    python_path: str
-    ida_path: str
+    python_path: str = ""
+    ida_path: str = ""
     openai_api_key: str = ""
     openai_base_url: str = ""
     fixed_elf_path: str = ""
     unfixed_elf_path: str = ""
+    gitcode_private_token: str = ""
+    github_token: str = ""
+    gitee_access_token: str = ""
 
     @property
     def log_dir(self) -> str:
@@ -51,12 +54,15 @@ def _load_settings() -> Settings:
     with open(CONFIG_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     return Settings(
-        python_path=data["PYTHON_PATH"],
-        ida_path=data["IDA_PATH"],
-        fixed_elf_path=data["FIXED_ELF_PATH"],
-        unfixed_elf_path=data["UNFIXED_ELF_PATH"],
+        python_path=data.get("PYTHON_PATH", ""),
+        ida_path=data.get("IDA_PATH", ""),
+        fixed_elf_path=data.get("FIXED_ELF_PATH", ""),
+        unfixed_elf_path=data.get("UNFIXED_ELF_PATH", ""),
         openai_api_key=data.get("OPENAI_API_KEY", ""),
         openai_base_url=data.get("OPENAI_BASE_URL", ""),
+        gitcode_private_token=data.get("GITCODE_PRIVATE_TOKEN", ""),
+        github_token=data.get("GITHUB_TOKEN", ""),
+        gitee_access_token=data.get("GITEE_ACCESS_TOKEN", ""),
     )
 
 

@@ -34,7 +34,7 @@ if hasattr(sys.stdout, "reconfigure"):
 from autoyara.collectors.oh_crawler.cli import _apply_tokens_from_config_yaml
 from autoyara.collectors.oh_crawler.discovery import fetch_bulletin, parse_all_links
 from autoyara.collectors.oh_crawler.pipeline import process_item
-from autoyara.llm.sync_client import SyncLLMClient
+from autoyara.llm.sync_client import SyncLLMClient, ensure_llm_api_key_or_exit
 from autoyara.models import sync_function_line_arrays, to_legacy_result_dict
 
 _apply_tokens_from_config_yaml()
@@ -92,6 +92,8 @@ def main() -> None:
     YEAR, MONTH = 2026, 2
     LIMIT = args.limit
     do_llm = not args.no_llm
+    if do_llm:
+        ensure_llm_api_key_or_exit()
 
     # 双写日志
     import builtins as _builtins
@@ -111,10 +113,10 @@ def main() -> None:
 
     _builtins.print = _p
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"OpenHarmony 安全公告 {YEAR}-{MONTH:02d}  前 {LIMIT} 个 CVE")
     print(f"LLM 质量审查: {'启用' if do_llm else '跳过'}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # ── 1. 拉公告 ───────────────────────────────────
     print("[1/4] 拉取安全公告 Markdown …")
@@ -236,7 +238,7 @@ def main() -> None:
         print(f"  报告 → {report_path}")
 
     # ── 汇总打印 ─────────────────────────────────────
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"汇总：{len(all_results)} 个函数条目，来自 {len(cve_list)} 个 CVE")
     ok = sum(1 for r in all_results if r.get("quality_ok") is True)
     fail = sum(1 for r in all_results if r.get("quality_ok") is False)
@@ -245,7 +247,7 @@ def main() -> None:
         print(f"  LLM 审查: 通过={ok} 未通过={fail} 未审={skip}")
     seen_cves_out = sorted({r.get("cve") or r.get("cve_id", "") for r in all_results})
     print(f"  成功 CVE: {seen_cves_out}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # 恢复原始 print
     _builtins.print = _real_print
