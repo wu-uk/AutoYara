@@ -317,6 +317,8 @@ def process_item(
                 if quality_check and llm_client is not None:
                     qc_first = check_quality(
                         description=description,
+                        vuln_type=vuln_type,
+                        vuln_impact=vuln_impact,
                         vulnerable_function=vuln_func or "",
                         fixed_function=fixed_func or "",
                         cve_id=cve_id,
@@ -376,7 +378,9 @@ def process_item(
                     and llm_client is not None
                 ):
                     meta_sum = summarize_bulletin_fields(
-                        description, cve_id, client=llm_client
+                        description,
+                        cve_id,
+                        client=llm_client
                     )
                     if not vuln_type:
                         vuln_type = meta_sum.get("vuln_type", "")
@@ -391,6 +395,8 @@ def process_item(
                 if quality_check and llm_client is not None:
                     qc_result = check_quality(
                         description=description,
+                        vuln_type=vuln_type,
+                        vuln_impact=vuln_impact,
                         vulnerable_function=vuln_func or "",
                         fixed_function=fixed_func or "",
                         cve_id=cve_id,

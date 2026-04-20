@@ -1,0 +1,29 @@
+{
+	"month": "{{ month }}",
+	"vulnerabilities": [
+		{
+			"month": "{{ month }}",
+			"vul_id": {
+				"cve": "{{ cve }}",
+				"openharmony-sa": "{{ openharmony_sa }}"
+			},
+			"severity": "{{ severity }}",
+			"vul_description": {
+				"zh": "{{ vul_description_zh }}",
+				"en": "{{ vul_description_en }}"
+			},
+			"vul_impact": {
+				"zh": "{{ vul_impact_zh }}",
+				"en": "{{ vul_impact_en }}"
+			},
+			"disclosure": {
+				"zh": "{{ disclosure_zh }}",
+				"en": "{{ disclosure_en }}"
+			},
+			"patch_info": {{ patch_info | tojson }},
+			"affected_projects": "{{ affected_projects }}",
+			"affected_versions": {{ affected_versions | tojson }},
+			"affected_device": {{ affected_device | tojson }}
+		}
+	]
+}

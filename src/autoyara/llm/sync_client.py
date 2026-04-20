@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-DEFAULT_MODEL = "gpt-5"
+DEFAULT_MODEL = "gpt-5.1"
 
 
 def _default_openai_credentials() -> tuple[str, str | None]:
@@ -36,6 +36,7 @@ class SyncLLMClient:
             model=self.model,
             messages=messages,
         )
+        print(response)
         return response.choices[0].message.content or ""
 
     def prompt(self, text: str) -> str:

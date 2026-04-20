@@ -13,7 +13,7 @@ if project_root not in sys.path:
 # 内部模块
 from configs.config import settings  # noqa: E402
 
-from autoyara.models import ValidationResult  # noqa: E402
+from autoyara.models import YaraValidationResult  # noqa: E402
 
 yara_path = Path(project_root) / "tools" / "yara64.exe"
 
@@ -26,11 +26,13 @@ def checkcve(cve_id):
     cve_yara_path = Path(settings.data_dir) / "processed" / cve_id / f"{cve_id}.yara"
 
     if not cve_json_path.exists() or not cve_yara_path.exists():
-        raise FileNotFoundError(f"未找到 {cve_id} 的 JSON 或 YARA 文件,{project_root}")
-    if not Path(FIXED_ELF_PATH).exists():
-        raise FileNotFoundError(f"未找到修复后的 ELF 文件: {FIXED_ELF_PATH}")
-    if not Path(UNFIXED_ELF_PATH).exists():
-        raise FileNotFoundError(f"未找到未修复的 ELF 文件: {UNFIXED_ELF_PATH}")
+        return YaraValidationResult(
+            cve_id=cve_id,
+            fixed_matched=0,
+            unfixed_matched=0,
+            return_code=-1,
+            message=f"未找到 {cve_id} 的 JSON 或 YARA 文件",
+        )
 
     # 检测 fixed 文件
     fixed_cmd = [str(yara_path), str(cve_yara_path), str(FIXED_ELF_PATH)]
@@ -61,7 +63,7 @@ def checkcve(cve_id):
         message = f"{cve_id} testcase unknown error"
         return_code = -1
 
-    return ValidationResult(
+    return YaraValidationResult(
         cve_id=cve_id,
         fixed_matched=fixed_matched,
         unfixed_matched=unfixed_matched,
