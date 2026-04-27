@@ -34,6 +34,15 @@ class CollectorConfig:
     cve_override: str = "MANUAL"
     local_patch_path: str | None = None
 
+@dataclass(slots=True)
+class YaraValidationResult:
+    """yara文件测试结果。"""
+    cve_id: str
+    fixed_matched: bool
+    unfixed_matched: bool
+    return_code: int
+    message: str = ""
+
 
 @dataclass(slots=True)
 class CVEItem:
@@ -77,4 +86,5 @@ __all__ = [
     "to_legacy_result_dict",
     "from_legacy_result_dict",
     "sync_function_line_arrays",
+    "YaraValidationResult",
 ]

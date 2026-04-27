@@ -2,7 +2,7 @@ import inspect
 
 from openai import AsyncOpenAI
 
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = "gpt-5.1"
 
 
 def _default_openai_credentials() -> tuple[str, str | None]:

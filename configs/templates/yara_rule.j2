@@ -1,5 +1,5 @@
-/* 
- * Copyright (c) 2025 Huawei Device Co., Ltd.
+/*
+ * Copyright (c) {{ copyright_year }} {{ copyright_holder }}
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,20 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 import "console"
-import "elf"
-
-
-rule CVE_2025_38466
+rule {{ cve_id }}
 {
     meta:
-		date = "20251013"
-		file = "kernel/events/core.c"
-
+        date = "{{ date }}"
+        file = "{{ file_name }}"
     strings:
-        $fix_flag = {E8 4E 39 8B 14 0D 00 F9 BF 3A 03 D5 F8 12 00 B9 BF 3A 03 D5}
-
+        $fix_flag = {{ '{' ~ hex_str ~ '}' }}
     condition:
-        $fix_flag and console.log("CVE-2025-38095 testcase pass")
+        $fix_flag and console.log("{{ log_msg }}")
 }

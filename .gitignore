@@ -44,6 +44,7 @@ configs/config.yaml
 
 # Logs
 logs/
+log/
 *.log
 
 # Temporary files
@@ -52,8 +53,10 @@ tmp/
 
 # 爬虫/脚本生成的产物（保留 output/ 目录用 .gitkeep）
 output/*.json
+output/*.md
 result.json
 report.txt
+
 
 # OS
 .DS_Store

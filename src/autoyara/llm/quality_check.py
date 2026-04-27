@@ -8,10 +8,9 @@
 
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass, field
 
+from .response_parser import parse_llm_json
 from .sync_client import SyncLLMClient
 
 _PATCH_CONTEXT_PREFIX = "/* patch context"
@@ -20,10 +19,10 @@ _MAX_DESC_CHARS = 1200
 
 _SYSTEM_PROMPT = """\
 你是漏洞情报质量评审专家。你将收到一条自动爬取的 CVE 漏洞记录，包含三个字段。
-请逐一判断每个字段是否完整有效，并以 JSON 格式返回结果。
+你需要逐一判断每个字段是否完整有效，并以 JSON 格式返回结果。
 
 判断标准：
-- 漏洞描述：必须包含对漏洞成因、类型或影响的实质性说明；
+- 漏洞描述，漏洞类型(type)和漏洞影响(impact)，只要有这三个字段就判断为合格
   仅有 git commit message（如 "Fix CVE-xxx"）、文件路径或补丁名称列表均不合格。
 - 修复前函数：必须是完整的 C/C++ 函数体（有签名、函数体、闭合花括号）；
   以注释 "/* patch context - source file unavailable */" 开头的是 diff 上下文片段，不合格。
@@ -40,6 +39,7 @@ _SYSTEM_PROMPT = """\
   "reason": "overall_ok 为 false 时给出简短说明，否则留空"
 }
 """
+
 
 
 @dataclass
@@ -121,14 +121,10 @@ def _annotate_function(code: str | None) -> str:
     return _smart_truncate_func(code, _MAX_CODE_CHARS)
 
 
-def _parse_llm_response(raw: str) -> dict:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.I)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    return json.loads(cleaned)
-
-
 def check_quality(
     description: str,
+    vuln_type :str,
+    vuln_impact: str,
     vulnerable_function: str,
     fixed_function: str,
     cve_id: str = "",
@@ -144,10 +140,12 @@ def check_quality(
     own_client = client is None
     if own_client:
         client = SyncLLMClient()
-
+    print(f"andi?  ,{description}")
     user_content = (
         f"CVE：{cve_id or '（未知）'}\n\n"
         f"【漏洞描述】\n{_truncate(description or '（空）', _MAX_DESC_CHARS)}\n\n"
+        f"【漏洞类型】\n {vuln_type or '（空）'}\n\n"
+        f"【漏洞影响】\n {vuln_impact or '（空）'}\n\n"
         f"【修复前函数】\n{_annotate_function(vulnerable_function)}\n\n"
         f"【修复后函数】\n{_annotate_function(fixed_function)}"
     )
@@ -159,7 +157,10 @@ def check_quality(
                 {"role": "user", "content": user_content},
             ]
         )
-        data = _parse_llm_response(raw)
+        print("="*30)
+        print(raw)
+        print("="*30)
+        data = parse_llm_json(raw)
         result = QualityCheckResult(
             overall_ok=bool(data.get("overall_ok", False)),
             description_ok=bool(data.get("description_ok", False)),
@@ -196,13 +197,16 @@ def check_quality(
 
 _SUMMARIZE_SYSTEM = """\
 你是漏洞信息提炼专家。给定一段 CVE 漏洞的英文描述，请用中文提炼出：
-1. 漏洞描述（漏洞类型的简短标签，10字以内，格式类似"内存泄露漏洞"、"use-after-free漏洞"、\
-"空指针解引用漏洞"、"整数溢出漏洞"）
+1. 漏洞描述，包含漏洞的成因，触发条件，漏洞类型，以及可能的攻击方式。需要具体到函数或语句，不超过50字 \
+    其中的漏洞类型示例放在漏洞描述的最后，形如：漏洞类型为堆缓冲区溢出 \
+    漏洞类型为整数溢出、漏洞类型为SQL注入等，不超过10个字
+
 2. 漏洞影响（漏洞被利用后的简短影响，20字以内，格式类似"本地攻击者可造成系统崩溃"、\
 "远程攻击者可执行任意代码"、"攻击者可造成拒绝服务"）
 
+
 仅返回如下 JSON，不要加 markdown 代码块：
-{"vuln_type": "...", "vuln_impact": "..."}
+{"vuln_type": "...", "vuln_impact": "...", "test": ""}
 """
 
 
@@ -212,6 +216,7 @@ def summarize_bulletin_fields(
     *,
     client: SyncLLMClient | None = None,
 ) -> dict[str, str]:
+
     """从 NVD 英文描述提炼简短的「漏洞描述」和「漏洞影响」（专用于三方库 CVE）。
 
     Returns:
@@ -219,6 +224,7 @@ def summarize_bulletin_fields(
     """
     empty: dict[str, str] = {"vuln_type": "", "vuln_impact": ""}
     desc = (description or "").strip()
+    print(f"kurotest {desc[:2000]}")
     if len(desc) < 20:
         return empty
 
@@ -230,10 +236,11 @@ def summarize_bulletin_fields(
         raw = client.chat(
             [
                 {"role": "system", "content": _SUMMARIZE_SYSTEM},
-                {"role": "user", "content": f"CVE：{cve_id}\n\n描述：{desc[:2000]}"},
+                {"role": "user", "content": f"CVE：{cve_id}\n\n描述：{desc}"},
             ]
         )
-        data = _parse_llm_response(raw)
+        data = parse_llm_json(raw)
+        print(f"kuroniko {raw}")
         vt = str(data.get("vuln_type", "")).strip()
         vi = str(data.get("vuln_impact", "")).strip()
         print(f"  [llm-summarize] {cve_id}  type={vt!r}  impact={vi!r}")
